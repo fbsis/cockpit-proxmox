@@ -41,9 +41,19 @@
     .bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--blue); transition: width .3s; }
     .split { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px; }
     .panel { padding: 20px; }
-    .node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 10px; }
-    .node { border-left: 3px solid var(--blue); padding: 9px 11px; background: color-mix(in srgb, var(--blue) 8%, transparent); }
-    .node strong { display: block; font-size: 17px; }
+    .usage-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; color: var(--muted); }
+    .usage-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .usage-legend i { width: 11px; height: 11px; border-radius: 2px; }
+    .usage-chart { max-height: 370px; overflow-y: auto; padding-right: 6px; }
+    .usage-row { display: grid; grid-template-columns: minmax(90px, 150px) 1fr; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent); }
+    .usage-row:first-child { border-top: 0; }
+    .usage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .usage-bars { display: grid; gap: 3px; }
+    .usage-track { position: relative; height: 7px; overflow: hidden; border-radius: 5px; background: color-mix(in srgb, var(--muted) 18%, transparent); }
+    .usage-track i { display: block; height: 100%; min-width: 0; border-radius: inherit; }
+    .usage-track.cpu i, .usage-legend .cpu { background: var(--blue); }
+    .usage-track.memory i, .usage-legend .memory { background: var(--green); }
+    .usage-track.disk i, .usage-legend .disk { background: var(--orange); }
     .consumer { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 10px; align-items: center; margin: 10px 0; }
     .consumer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .consumer .bar { margin: 0; }
@@ -102,7 +112,11 @@
     </section>
 
     <section class="split">
-      <div class="panel"><h2>Máquinas por node</h2><div class="node-grid" id="nodes"><span class="muted">Carregando…</span></div></div>
+      <div class="panel">
+        <h2>Utilização por máquina</h2>
+        <div class="usage-legend"><span><i class="cpu"></i>CPU</span><span><i class="memory"></i>Memória</span><span><i class="disk"></i>Disco</span></div>
+        <div class="usage-chart" id="usage-chart"><span class="muted">Carregando…</span></div>
+      </div>
       <div class="panel"><h2>Maior consumo de CPU</h2><div id="consumers"><span class="muted">Carregando…</span></div></div>
     </section>
 
@@ -265,20 +279,26 @@
         $("storage").textContent = storageMax ? percent(storageUsed / storageMax) : "—";
         $("storage-detail").textContent = storageMax ? `${bytes(storageUsed)} de ${bytes(storageMax)}` : "Sem acesso aos storages";
         setBar("cpu-bar", cpuRatio); setBar("memory-bar", mem / maxmem); setBar("disk-bar", disk / maxdisk); setBar("storage-bar", storageUsed / storageMax);
-        renderNodes(); renderConsumers(); renderTable(); renderQuickLinks();
+        renderUsageChart(); renderConsumers(); renderTable(); renderQuickLinks();
       }
 
-      function renderNodes() {
-        const groups = {};
-        state.machines.forEach(m => {
-          const key = m.node || "Sem node";
-          groups[key] ||= { total: 0, running: 0 };
-          groups[key].total++;
-          if (m.status === "running") groups[key].running++;
-        });
-        $("nodes").innerHTML = Object.entries(groups).sort().map(([node, count]) =>
-          `<div class="node"><strong>${html(count.total)}</strong>${html(node)}<div class="muted">${count.running} ligadas</div></div>`
-        ).join("") || '<span class="muted">Nenhuma máquina encontrada.</span>';
+      function renderUsageChart() {
+        const rows = state.machines.slice().sort((a, b) => number(a.vmid) - number(b.vmid));
+        const width = ratio => Math.max(0, Math.min(100, number(ratio) * 100));
+        $("usage-chart").innerHTML = rows.map(m => {
+          const cpu = width(m.cpu);
+          const memory = width(number(m.mem) / number(m.maxmem));
+          const disk = width(number(m.disk) / number(m.maxdisk));
+          const label = `${m.vmid} · ${m.name || "Sem nome"}`;
+          return `<div class="usage-row">
+            <span class="usage-name" title="${html(label)}">${html(label)}</span>
+            <div class="usage-bars">
+              <div class="usage-track cpu" title="CPU: ${Math.round(cpu)}%"><i style="width:${cpu}%"></i></div>
+              <div class="usage-track memory" title="Memória: ${Math.round(memory)}%"><i style="width:${memory}%"></i></div>
+              <div class="usage-track disk" title="Disco: ${Math.round(disk)}%"><i style="width:${disk}%"></i></div>
+            </div>
+          </div>`;
+        }).join("") || '<span class="muted">Nenhuma máquina encontrada.</span>';
       }
 
       function renderConsumers() {

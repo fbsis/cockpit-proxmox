@@ -8,7 +8,7 @@ and uses Bootstrap from jsDelivr.
 
 - Cluster summary with QEMU VM and LXC totals
 - Running, stopped, and paused machine counts
-- Machines grouped by Proxmox node
+- Per-machine CPU, memory, and disk utilization chart
 - CPU, memory, virtual disk, and cluster storage usage
 - Highest CPU consumers
 - VMID, name, type, node, status, CPU, RAM, disk, network traffic, uptime,
