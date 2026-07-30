@@ -14,6 +14,7 @@ and uses Bootstrap from jsDelivr.
 - VMID, name, type, node, status, CPU, RAM, disk, network traffic, uptime,
   tags, description, and template information
 - Search and filters by status and machine type
+- Open the native Proxmox noVNC console for running guests
 - Start, stop, and reboot actions for QEMU VMs and LXC containers
 
 The main machine data is read with:
@@ -102,6 +103,25 @@ Power actions are sent to these Proxmox API paths:
 
 The **Stop** action performs an immediate Proxmox `stop` operation. It is not a
 guest operating system shutdown.
+
+## noVNC console
+
+Click **Console** on a running guest to open the native Proxmox console in a
+new browser window. The plugin uses the current Cockpit hostname and opens the
+Proxmox web interface on HTTPS port `8006`. QEMU guests use the KVM noVNC
+console, while LXC guests use the Proxmox container console.
+
+The browser may ask you to:
+
+- Allow pop-up windows for the Cockpit address
+- Accept the Proxmox HTTPS certificate
+- Sign in to the Proxmox web interface
+
+Cockpit and Proxmox authentication sessions are independent. Opening a console
+does not copy Cockpit credentials or create a Proxmox API ticket. If Cockpit is
+accessed through a reverse proxy or a hostname that does not expose Proxmox
+port `8006`, the generated console URL may need to be adjusted for that
+environment.
 
 ## Project structure
 

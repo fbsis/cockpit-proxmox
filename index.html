@@ -264,6 +264,7 @@
           <td>${duration(m.uptime)}</td>
           <td>${tags}</td>
           <td><div class="actions">
+            <button class="btn btn-sm btn-outline-secondary" data-action="console" data-key="${html(key)}" ${!running || busy || number(m.template) ? "disabled" : ""}>Console</button>
             <button class="btn btn-sm btn-outline-success" data-action="start" data-key="${html(key)}" ${!stopped || busy || number(m.template) ? "disabled" : ""}>Iniciar</button>
             <button class="btn btn-sm btn-outline-danger" data-action="stop" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Parar</button>
             <button class="btn btn-sm btn-outline-primary" data-action="reboot" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Reiniciar</button>
@@ -275,12 +276,36 @@
         const [node, type, vmid] = key.split("/");
         const machine = state.machines.find(m => String(m.vmid) === vmid && m.node === node && m.type === type);
         if (!machine) return;
+        if (action === "console") {
+          openConsole(machine);
+          return;
+        }
         const labels = { start:"iniciar", stop:"parar", reboot:"reiniciar" };
         state.pending = { action, key, machine };
         $("confirm-title").textContent = `${labels[action][0].toUpperCase()}${labels[action].slice(1)} máquina`;
         $("confirm-text").textContent = `Deseja ${labels[action]} ${machine.name || "a máquina"} (VMID ${vmid}) no node ${node}?`;
         $("confirm-action").className = `btn ${action === "stop" ? "btn-danger" : "btn-primary"}`;
         $("confirm-dialog").showModal();
+      }
+
+      function openConsole(machine) {
+        const host = window.location.hostname;
+        const params = new URLSearchParams({
+          console: machine.type === "lxc" ? "lxc" : "kvm",
+          novnc: "1",
+          vmid: String(machine.vmid),
+          vmname: machine.name || "",
+          node: machine.node,
+          resize: "scale",
+          cmd: ""
+        });
+        const consoleUrl = `${window.location.protocol}//${host}:8006/?${params}`;
+        const consoleWindow = window.open(consoleUrl, `pve-console-${machine.vmid}`);
+        if (consoleWindow) {
+          consoleWindow.opener = null;
+        } else {
+          showError("O navegador bloqueou a janela do console. Permita pop-ups para este endereço do Cockpit.");
+        }
       }
 
       async function executeAction() {
