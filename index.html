@@ -164,8 +164,9 @@
     (() => {
       "use strict";
       const $ = id => document.getElementById(id);
-      const state = { machines: [], storage: [], busy: new Set(), pending: null, quickLinks: [] };
+      const state = { machines: [], storage: [], busy: new Set(), pending: null, quickLinks: [], loading: false, refreshTimer: null };
       const quickLinksKey = "cockpit-proxmox-quick-links";
+      const refreshInterval = 15000;
       const html = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
       const number = value => Number(value) || 0;
       const percent = value => `${Math.round(number(value) * 100)}%`;
@@ -190,6 +191,9 @@
       const sum = (items, key) => items.reduce((total, item) => total + number(item[key]), 0);
 
       async function load() {
+        if (state.loading || document.hidden) return;
+        state.loading = true;
+        window.clearTimeout(state.refreshTimer);
         $("app").classList.add("loading");
         $("refresh").disabled = true;
         showError("");
@@ -202,14 +206,23 @@
           state.storage = storage;
           render();
           loadDescriptions(state.machines);
-          $("updated").textContent = `Atualizado em ${new Date().toLocaleString("pt-BR")}`;
+          $("updated").textContent = `Atualizado em ${new Date().toLocaleString("pt-BR")} · atualização automática a cada 15s`;
         } catch (error) {
           showError(`Não foi possível consultar o Proxmox.\n${error.message || error}`);
           $("updated").textContent = "Falha ao atualizar";
         } finally {
           $("app").classList.remove("loading");
           $("refresh").disabled = false;
+          state.loading = false;
+          scheduleAutoRefresh();
         }
+      }
+
+      function scheduleAutoRefresh() {
+        window.clearTimeout(state.refreshTimer);
+        state.refreshTimer = null;
+        if (document.hidden) return;
+        state.refreshTimer = window.setTimeout(load, refreshInterval);
       }
 
       async function loadDescriptions(machines) {
@@ -438,6 +451,16 @@
         state.quickLinks.splice(Number(button.dataset.removeLink), 1);
         saveQuickLinks();
       });
+      document.addEventListener("visibilitychange", () => {
+        window.clearTimeout(state.refreshTimer);
+        state.refreshTimer = null;
+        if (document.hidden) {
+          $("updated").textContent = "Atualização automática pausada enquanto a página não está visível";
+        } else {
+          load();
+        }
+      });
+      window.addEventListener("pagehide", () => window.clearTimeout(state.refreshTimer));
       loadQuickLinks();
       load();
     })();

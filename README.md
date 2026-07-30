@@ -15,6 +15,7 @@ and uses Bootstrap from jsDelivr.
   tags, description, and template information
 - Full comments and descriptions in a machine details dialog
 - Browser-persisted quick links for frequently used services
+- Automatic refresh every 15 seconds while the page is visible
 - Search and filters by status and machine type
 - Open the native Proxmox noVNC console for running guests
 - Start, stop, and reboot actions for QEMU VMs and LXC containers
@@ -27,6 +28,11 @@ pvesh get /cluster/resources --type vm --output-format json
 
 Additional `pvesh` requests are used to retrieve storage and machine
 configuration details.
+
+Automatic refresh pauses when the browser tab is hidden or the page is no
+longer active. Returning to the page triggers an immediate refresh and starts a
+new 15-second cycle. This avoids unnecessary Proxmox API requests while the
+dashboard is not being viewed.
 
 ## Requirements
 
