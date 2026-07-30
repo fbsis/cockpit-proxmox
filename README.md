@@ -42,10 +42,8 @@ another machine will not provide access to the local Proxmox cluster API.
 Run these commands on the Proxmox VE node:
 
 ```shell
-git clone https://github.com/fbsis/cockpit-proxmox.git
-cd cockpit-proxmox
-sudo mkdir -p /usr/share/cockpit/proxmox-overview
-sudo cp index.html manifest.json /usr/share/cockpit/proxmox-overview/
+cd /usr/share/cockpit
+sudo git clone https://github.com/fbsis/cockpit-proxmox.git proxmox-overview
 sudo systemctl restart cockpit.socket
 ```
 
@@ -80,11 +78,11 @@ rm ~/.local/share/cockpit/proxmox-overview
 
 ## Updating
 
-From the cloned repository:
+Update the repository cloned inside the Cockpit packages directory:
 
 ```shell
-git pull
-sudo cp index.html manifest.json /usr/share/cockpit/proxmox-overview/
+cd /usr/share/cockpit/proxmox-overview
+sudo git pull
 sudo systemctl restart cockpit.socket
 ```
 
