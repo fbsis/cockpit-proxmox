@@ -13,6 +13,8 @@ and uses Bootstrap from jsDelivr.
 - Highest CPU consumers
 - VMID, name, type, node, status, CPU, RAM, disk, network traffic, uptime,
   tags, description, and template information
+- Full comments and descriptions in a machine details dialog
+- Browser-persisted quick links for frequently used services
 - Search and filters by status and machine type
 - Open the native Proxmox noVNC console for running guests
 - Start, stop, and reboot actions for QEMU VMs and LXC containers
@@ -122,6 +124,13 @@ does not copy Cockpit credentials or create a Proxmox API ticket. If Cockpit is
 accessed through a reverse proxy or a hostname that does not expose Proxmox
 port `8006`, the generated console URL may need to be adjusted for that
 environment.
+
+## Quick links
+
+The **Quick links** panel stores frequently used HTTP or HTTPS addresses in the
+browser's local storage. Add a display name and URL to open services in a new
+tab. Links are local to the current browser profile; they are not stored on the
+Proxmox server and are not shared with other users or browsers.
 
 ## Project structure
 

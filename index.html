@@ -47,6 +47,12 @@
     .consumer { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 10px; align-items: center; margin: 10px 0; }
     .consumer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .consumer .bar { margin: 0; }
+    .quick-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 15px; }
+    .quick-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; }
+    .quick-link a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary); text-decoration: none; }
+    .quick-link a:hover { text-decoration: underline; }
+    .quick-link-form { display: flex; flex-wrap: wrap; gap: 8px; }
+    .quick-link-form input { flex: 1 1 220px; }
     .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
     .filters { display: flex; flex-wrap: wrap; gap: 8px; }
     input { min-width: 230px; }
@@ -100,6 +106,21 @@
       <div class="panel"><h2>Maior consumo de CPU</h2><div id="consumers"><span class="muted">Carregando…</span></div></div>
     </section>
 
+    <section class="panel mb-4">
+      <div class="toolbar">
+        <div>
+          <h2 class="mb-1">Links rápidos</h2>
+          <span class="muted">Os links ficam salvos neste navegador.</span>
+        </div>
+        <form class="quick-link-form" id="quick-link-form">
+          <input class="form-control form-control-sm" id="quick-link-name" required maxlength="60" placeholder="Nome do link">
+          <input class="form-control form-control-sm" id="quick-link-url" required type="url" placeholder="https://exemplo.local">
+          <button class="btn btn-sm btn-primary" type="submit">Adicionar</button>
+        </form>
+      </div>
+      <div class="quick-links" id="quick-links"></div>
+    </section>
+
     <section class="panel">
       <div class="toolbar">
         <h2>VMs e containers</h2>
@@ -123,11 +144,28 @@
     <div class="dialog-actions"><button class="btn btn-outline-secondary" id="cancel-action">Cancelar</button><button class="btn btn-primary" id="confirm-action">Confirmar</button></div>
   </dialog>
 
+  <dialog id="details-dialog">
+    <div class="dialog-body">
+      <h2 id="details-title">Detalhes da máquina</h2>
+      <dl class="row mb-0">
+        <dt class="col-4">VMID</dt><dd class="col-8" id="details-vmid"></dd>
+        <dt class="col-4">Nome</dt><dd class="col-8" id="details-name"></dd>
+        <dt class="col-4">Node</dt><dd class="col-8" id="details-node"></dd>
+        <dt class="col-4">Tipo</dt><dd class="col-8" id="details-type"></dd>
+        <dt class="col-4">Tags</dt><dd class="col-8" id="details-tags"></dd>
+        <dt class="col-12 mt-2">Comentário / descrição</dt>
+        <dd class="col-12 mt-1 mb-0 text-break" id="details-description"></dd>
+      </dl>
+    </div>
+    <div class="dialog-actions"><button class="btn btn-primary" id="close-details">Fechar</button></div>
+  </dialog>
+
   <script>
     (() => {
       "use strict";
       const $ = id => document.getElementById(id);
-      const state = { machines: [], storage: [], busy: new Set(), pending: null };
+      const state = { machines: [], storage: [], busy: new Set(), pending: null, quickLinks: [] };
+      const quickLinksKey = "cockpit-proxmox-quick-links";
       const html = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
       const number = value => Number(value) || 0;
       const percent = value => `${Math.round(number(value) * 100)}%`;
@@ -214,7 +252,7 @@
         $("storage").textContent = storageMax ? percent(storageUsed / storageMax) : "—";
         $("storage-detail").textContent = storageMax ? `${bytes(storageUsed)} de ${bytes(storageMax)}` : "Sem acesso aos storages";
         setBar("cpu-bar", cpuRatio); setBar("memory-bar", mem / maxmem); setBar("disk-bar", disk / maxdisk); setBar("storage-bar", storageUsed / storageMax);
-        renderNodes(); renderConsumers(); renderTable();
+        renderNodes(); renderConsumers(); renderTable(); renderQuickLinks();
       }
 
       function renderNodes() {
@@ -264,6 +302,7 @@
           <td>${duration(m.uptime)}</td>
           <td>${tags}</td>
           <td><div class="actions">
+            <button class="btn btn-sm btn-outline-secondary" data-action="details" data-key="${html(key)}">Detalhes</button>
             <button class="btn btn-sm btn-outline-secondary" data-action="console" data-key="${html(key)}" ${!running || busy || number(m.template) ? "disabled" : ""}>Console</button>
             <button class="btn btn-sm btn-outline-success" data-action="start" data-key="${html(key)}" ${!stopped || busy || number(m.template) ? "disabled" : ""}>Iniciar</button>
             <button class="btn btn-sm btn-outline-danger" data-action="stop" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Parar</button>
@@ -276,6 +315,10 @@
         const [node, type, vmid] = key.split("/");
         const machine = state.machines.find(m => String(m.vmid) === vmid && m.node === node && m.type === type);
         if (!machine) return;
+        if (action === "details") {
+          showDetails(machine);
+          return;
+        }
         if (action === "console") {
           openConsole(machine);
           return;
@@ -286,6 +329,42 @@
         $("confirm-text").textContent = `Deseja ${labels[action]} ${machine.name || "a máquina"} (VMID ${vmid}) no node ${node}?`;
         $("confirm-action").className = `btn ${action === "stop" ? "btn-danger" : "btn-primary"}`;
         $("confirm-dialog").showModal();
+      }
+
+      function showDetails(machine) {
+        $("details-title").textContent = `${machine.name || "Máquina"} · VMID ${machine.vmid}`;
+        $("details-vmid").textContent = machine.vmid;
+        $("details-name").textContent = machine.name || "Sem nome";
+        $("details-node").textContent = machine.node || "—";
+        $("details-type").textContent = `${machine.type === "qemu" ? "QEMU" : "LXC"}${number(machine.template) ? " · Template" : ""}`;
+        $("details-tags").textContent = machine.tags || "Sem tags";
+        $("details-description").textContent = machine.description || "Sem comentário ou descrição.";
+        $("details-dialog").showModal();
+      }
+
+      function loadQuickLinks() {
+        try {
+          const saved = JSON.parse(window.localStorage.getItem(quickLinksKey) || "[]");
+          state.quickLinks = Array.isArray(saved) ? saved.filter(link => link && link.name && link.url) : [];
+        } catch (_) {
+          state.quickLinks = [];
+        }
+        renderQuickLinks();
+      }
+
+      function saveQuickLinks() {
+        try {
+          window.localStorage.setItem(quickLinksKey, JSON.stringify(state.quickLinks));
+        } catch (_) {
+          showError("Não foi possível salvar os links rápidos neste navegador.");
+        }
+        renderQuickLinks();
+      }
+
+      function renderQuickLinks() {
+        $("quick-links").innerHTML = state.quickLinks.map((link, index) =>
+          `<div class="quick-link"><a href="${html(link.url)}" target="_blank" rel="noopener noreferrer" title="${html(link.url)}">${html(link.name)}</a><button class="btn btn-sm btn-outline-danger" data-remove-link="${index}" aria-label="Remover ${html(link.name)}">Remover</button></div>`
+        ).join("") || '<span class="muted">Nenhum link adicionado.</span>';
       }
 
       function openConsole(machine) {
@@ -338,6 +417,28 @@
       });
       $("cancel-action").addEventListener("click", () => { state.pending = null; $("confirm-dialog").close(); });
       $("confirm-action").addEventListener("click", executeAction);
+      $("close-details").addEventListener("click", () => $("details-dialog").close());
+      $("quick-link-form").addEventListener("submit", event => {
+        event.preventDefault();
+        const name = $("quick-link-name").value.trim();
+        const rawUrl = $("quick-link-url").value.trim();
+        try {
+          const url = new URL(rawUrl);
+          if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+          state.quickLinks.push({ name, url: url.href });
+          saveQuickLinks();
+          event.target.reset();
+        } catch (_) {
+          showError("Informe um link válido começando com http:// ou https://.");
+        }
+      });
+      $("quick-links").addEventListener("click", event => {
+        const button = event.target.closest("button[data-remove-link]");
+        if (!button) return;
+        state.quickLinks.splice(Number(button.dataset.removeLink), 1);
+        saveQuickLinks();
+      });
+      loadQuickLinks();
       load();
     })();
   </script>
