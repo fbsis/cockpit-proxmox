@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proxmox Overview</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="../base1/cockpit.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f3f5f7; --panel: #fff; --text: #151515; --muted: #6a6e73;
+      --border: #d2d2d2; --primary: #06c; --primary-hover: #004080;
+      --green: #3e8635; --red: #c9190b; --orange: #ec7a08; --blue: #2b9af3;
+      --shadow: 0 1px 2px rgb(3 3 3 / 12%);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151515; --panel: #212427; --text: #f0f0f0; --muted: #b8bbbe;
+        --border: #4f5255; --primary: #73bcf7; --primary-hover: #bee1f4;
+        --shadow: 0 1px 3px rgb(0 0 0 / 45%);
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+    .page { max-width: 1600px; margin: auto; padding: 24px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    h1 { margin: 0; font-size: 26px; font-weight: 500; }
+    h2 { margin: 0 0 16px; font-size: 18px; font-weight: 500; }
+    .subtitle, .muted { color: var(--muted); }
+    .subtitle { margin-top: 3px; }
+    .btn-primary { --bs-btn-bg: var(--primary); --bs-btn-border-color: var(--primary); }
+    .btn-outline-danger { --bs-btn-color: var(--red); --bs-btn-border-color: var(--red); }
+    .cards { display: grid; grid-template-columns: repeat(6, minmax(145px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .card, .panel { background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow); }
+    .card { padding: 18px; min-height: 112px; }
+    .card-label { color: var(--muted); margin-bottom: 7px; }
+    .card-value { font-size: 25px; font-weight: 500; white-space: nowrap; }
+    .card-detail { color: var(--muted); margin-top: 4px; }
+    .bar { height: 6px; margin-top: 13px; overflow: hidden; border-radius: 6px; background: color-mix(in srgb, var(--muted) 25%, transparent); }
+    .bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--blue); transition: width .3s; }
+    .split { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px; }
+    .panel { padding: 20px; }
+    .node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 10px; }
+    .node { border-left: 3px solid var(--blue); padding: 9px 11px; background: color-mix(in srgb, var(--blue) 8%, transparent); }
+    .node strong { display: block; font-size: 17px; }
+    .consumer { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 10px; align-items: center; margin: 10px 0; }
+    .consumer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .consumer .bar { margin: 0; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+    input { min-width: 230px; }
+    .table-wrap { overflow-x: auto; }
+    table { min-width: 1280px; }
+    th, td { white-space: nowrap; }
+    th { color: var(--muted); font-weight: 500; background: color-mix(in srgb, var(--muted) 5%, transparent); }
+    tbody tr:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); }
+    .name-cell { max-width: 190px; white-space: normal; }
+    .name-cell strong { display: block; }
+    .description { display: block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); white-space: nowrap; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 20px; padding: 3px 9px; background: color-mix(in srgb, var(--muted) 12%, transparent); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .running .dot { background: var(--green); } .stopped .dot { background: var(--red); } .paused .dot { background: var(--orange); }
+    .tag { display: inline-block; margin: 1px 3px 1px 0; padding: 1px 6px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); }
+    .actions { display: flex; gap: 5px; }
+    #message { display: none; white-space: pre-wrap; }
+    #message.show { display: block; }
+    .loading { opacity: .62; pointer-events: none; }
+    dialog { width: min(440px, calc(100% - 32px)); padding: 0; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 10px 30px #0006; }
+    dialog::backdrop { background: #0008; }
+    .dialog-body { padding: 22px; } .dialog-actions { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+    @media (max-width: 1200px) { .cards { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 800px) { .page { padding: 16px; } .cards { grid-template-columns: repeat(2, 1fr); } .split { grid-template-columns: 1fr; } header { align-items: flex-start; } }
+    @media (max-width: 480px) { .cards { grid-template-columns: 1fr; } header { flex-direction: column; } input { min-width: 100%; } }
+  </style>
+</head>
+<body>
+  <main class="page" id="app">
+    <header>
+      <div>
+        <h1>Proxmox Overview</h1>
+        <div class="subtitle" id="updated">Carregando dados do cluster…</div>
+      </div>
+      <button class="btn btn-primary" id="refresh">Atualizar</button>
+    </header>
+
+    <div id="message" class="alert alert-danger shadow-sm" role="alert"></div>
+
+    <section class="cards" aria-label="Resumo geral">
+      <div class="card"><div class="card-label">Máquinas</div><div class="card-value" id="total">—</div><div class="card-detail" id="types">VMs e LXCs</div></div>
+      <div class="card"><div class="card-label">Estados</div><div class="card-value" id="running">—</div><div class="card-detail" id="states">Ligadas</div></div>
+      <div class="card"><div class="card-label">CPU utilizada</div><div class="card-value" id="cpu">—</div><div class="card-detail" id="cpus">— CPUs alocadas</div><div class="bar"><i id="cpu-bar"></i></div></div>
+      <div class="card"><div class="card-label">Memória</div><div class="card-value" id="memory">—</div><div class="card-detail" id="memory-detail">—</div><div class="bar"><i id="memory-bar"></i></div></div>
+      <div class="card"><div class="card-label">Discos das máquinas</div><div class="card-value" id="disk">—</div><div class="card-detail" id="disk-detail">—</div><div class="bar"><i id="disk-bar"></i></div></div>
+      <div class="card"><div class="card-label">Storage do cluster</div><div class="card-value" id="storage">—</div><div class="card-detail" id="storage-detail">—</div><div class="bar"><i id="storage-bar"></i></div></div>
+    </section>
+
+    <section class="split">
+      <div class="panel"><h2>Máquinas por node</h2><div class="node-grid" id="nodes"><span class="muted">Carregando…</span></div></div>
+      <div class="panel"><h2>Maior consumo de CPU</h2><div id="consumers"><span class="muted">Carregando…</span></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <h2>VMs e containers</h2>
+        <div class="filters">
+          <input class="form-control form-control-sm" id="search" type="search" placeholder="Buscar por VMID, nome, node ou tag">
+          <select class="form-select form-select-sm w-auto" id="status-filter"><option value="">Todos os estados</option><option value="running">Ligadas</option><option value="stopped">Desligadas</option><option value="paused">Pausadas</option></select>
+          <select class="form-select form-select-sm w-auto" id="type-filter"><option value="">Todos os tipos</option><option value="qemu">QEMU</option><option value="lxc">LXC</option></select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>VMID / Nome</th><th>Tipo</th><th>Node</th><th>Status</th><th>CPU</th><th>RAM</th><th>Disco</th><th>Rede ↑ / ↓</th><th>Uptime</th><th>Tags</th><th>Ações</th></tr></thead>
+          <tbody id="machines"><tr><td colspan="11" class="muted">Carregando recursos…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="confirm-dialog">
+    <div class="dialog-body"><h2 id="confirm-title">Confirmar ação</h2><div id="confirm-text"></div></div>
+    <div class="dialog-actions"><button class="btn btn-outline-secondary" id="cancel-action">Cancelar</button><button class="btn btn-primary" id="confirm-action">Confirmar</button></div>
+  </dialog>
+
+  <script>
+    (() => {
+      "use strict";
+      const $ = id => document.getElementById(id);
+      const state = { machines: [], storage: [], busy: new Set(), pending: null };
+      const html = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
+      const number = value => Number(value) || 0;
+      const percent = value => `${Math.round(number(value) * 100)}%`;
+      const bytes = value => {
+        let n = number(value);
+        if (!n) return "0 B";
+        const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+        const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+        return `${(n / 1024 ** i).toFixed(i > 2 ? 1 : 0)} ${units[i]}`;
+      };
+      const duration = seconds => {
+        let s = Math.floor(number(seconds));
+        if (!s) return "—";
+        const d = Math.floor(s / 86400); s %= 86400;
+        const h = Math.floor(s / 3600); s %= 3600;
+        const m = Math.floor(s / 60);
+        return [d && `${d}d`, h && `${h}h`, !d && m && `${m}m`].filter(Boolean).join(" ");
+      };
+      const statusLabel = value => ({ running:"Ligada", stopped:"Desligada", paused:"Pausada" })[value] || value || "Desconhecido";
+      const pvesh = args => cockpit.spawn(["pvesh", ...args, "--output-format", "json"], { superuser: "require", err: "message" }).then(JSON.parse);
+      const setBar = (id, ratio) => $(id).style.width = `${Math.max(0, Math.min(100, number(ratio) * 100))}%`;
+      const sum = (items, key) => items.reduce((total, item) => total + number(item[key]), 0);
+
+      async function load() {
+        $("app").classList.add("loading");
+        $("refresh").disabled = true;
+        showError("");
+        try {
+          const [machines, storage] = await Promise.all([
+            pvesh(["get", "/cluster/resources", "--type", "vm"]),
+            pvesh(["get", "/cluster/resources", "--type", "storage"]).catch(() => [])
+          ]);
+          state.machines = machines.map(m => ({ ...m, type: String(m.type || "").toLowerCase() }));
+          state.storage = storage;
+          render();
+          loadDescriptions(state.machines);
+          $("updated").textContent = `Atualizado em ${new Date().toLocaleString("pt-BR")}`;
+        } catch (error) {
+          showError(`Não foi possível consultar o Proxmox.\n${error.message || error}`);
+          $("updated").textContent = "Falha ao atualizar";
+        } finally {
+          $("app").classList.remove("loading");
+          $("refresh").disabled = false;
+        }
+      }
+
+      async function loadDescriptions(machines) {
+        const queue = machines.slice();
+        const worker = async () => {
+          while (queue.length) {
+            const machine = queue.shift();
+            if (!["qemu", "lxc"].includes(machine.type) || !machine.node || machine.vmid == null) continue;
+            try {
+              const config = await pvesh(["get", `/nodes/${machine.node}/${machine.type}/${machine.vmid}/config`]);
+              machine.description = config.description || config.comments || "";
+              machine.tags = config.tags || machine.tags || "";
+              machine.template = config.template ?? machine.template;
+            } catch (_) {}
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+        renderTable();
+      }
+
+      function render() {
+        const m = state.machines;
+        const running = m.filter(x => x.status === "running").length;
+        const stopped = m.filter(x => x.status === "stopped").length;
+        const paused = m.filter(x => x.status === "paused").length;
+        const cpuRatio = m.length ? m.reduce((n, x) => n + number(x.cpu) * number(x.maxcpu), 0) / Math.max(1, sum(m, "maxcpu")) : 0;
+        const mem = sum(m, "mem"), maxmem = sum(m, "maxmem");
+        const disk = sum(m, "disk"), maxdisk = sum(m, "maxdisk");
+        const storageUsed = sum(state.storage, "disk"), storageMax = sum(state.storage, "maxdisk");
+        $("total").textContent = m.length;
+        $("types").textContent = `${m.filter(x => x.type === "qemu").length} QEMU · ${m.filter(x => x.type === "lxc").length} LXC`;
+        $("running").textContent = running;
+        $("states").textContent = `${stopped} desligadas · ${paused} pausadas`;
+        $("cpu").textContent = percent(cpuRatio);
+        $("cpus").textContent = `${sum(m, "maxcpu")} CPUs alocadas`;
+        $("memory").textContent = maxmem ? percent(mem / maxmem) : "—";
+        $("memory-detail").textContent = `${bytes(mem)} usados · ${bytes(Math.max(0, maxmem - mem))} disponíveis`;
+        $("disk").textContent = maxdisk ? percent(disk / maxdisk) : "—";
+        $("disk-detail").textContent = `${bytes(disk)} de ${bytes(maxdisk)}`;
+        $("storage").textContent = storageMax ? percent(storageUsed / storageMax) : "—";
+        $("storage-detail").textContent = storageMax ? `${bytes(storageUsed)} de ${bytes(storageMax)}` : "Sem acesso aos storages";
+        setBar("cpu-bar", cpuRatio); setBar("memory-bar", mem / maxmem); setBar("disk-bar", disk / maxdisk); setBar("storage-bar", storageUsed / storageMax);
+        renderNodes(); renderConsumers(); renderTable();
+      }
+
+      function renderNodes() {
+        const groups = {};
+        state.machines.forEach(m => {
+          const key = m.node || "Sem node";
+          groups[key] ||= { total: 0, running: 0 };
+          groups[key].total++;
+          if (m.status === "running") groups[key].running++;
+        });
+        $("nodes").innerHTML = Object.entries(groups).sort().map(([node, count]) =>
+          `<div class="node"><strong>${html(count.total)}</strong>${html(node)}<div class="muted">${count.running} ligadas</div></div>`
+        ).join("") || '<span class="muted">Nenhuma máquina encontrada.</span>';
+      }
+
+      function renderConsumers() {
+        const rows = state.machines.filter(m => m.status === "running").sort((a,b) => number(b.cpu) - number(a.cpu)).slice(0, 5);
+        $("consumers").innerHTML = rows.map(m =>
+          `<div class="consumer"><span class="consumer-name" title="${html(m.name || m.vmid)}">${html(m.name || `VM ${m.vmid}`)}</span><div class="bar"><i style="width:${Math.min(100, number(m.cpu) * 100)}%"></i></div><strong>${percent(m.cpu)}</strong></div>`
+        ).join("") || '<span class="muted">Nenhuma máquina ligada.</span>';
+      }
+
+      function renderTable() {
+        const query = $("search").value.trim().toLowerCase();
+        const status = $("status-filter").value, type = $("type-filter").value;
+        const rows = state.machines.filter(m => {
+          const haystack = [m.vmid, m.name, m.node, m.tags, m.description].join(" ").toLowerCase();
+          return (!query || haystack.includes(query)) && (!status || m.status === status) && (!type || m.type === type);
+        }).sort((a,b) => number(a.vmid) - number(b.vmid));
+        $("machines").innerHTML = rows.map(machineRow).join("") || '<tr><td colspan="11" class="muted">Nenhum resultado encontrado.</td></tr>';
+      }
+
+      function machineRow(m) {
+        const running = m.status === "running", stopped = m.status === "stopped";
+        const key = `${m.node}/${m.type}/${m.vmid}`, busy = state.busy.has(key);
+        const tags = String(m.tags || "").split(/[;,]/).filter(Boolean).map(t => `<span class="tag">${html(t.trim())}</span>`).join("") || "—";
+        const template = number(m.template) ? '<span class="tag">Template</span>' : "";
+        return `<tr>
+          <td class="name-cell"><strong>${html(m.vmid)} · ${html(m.name || "Sem nome")} ${template}</strong><span class="description" title="${html(m.description)}">${html(m.description || "Sem descrição")}</span></td>
+          <td>${m.type === "qemu" ? "QEMU" : m.type === "lxc" ? "LXC" : html(m.type)}</td>
+          <td>${html(m.node || "—")}</td>
+          <td><span class="badge ${html(m.status)}"><i class="dot"></i>${html(statusLabel(m.status))}</span></td>
+          <td>${percent(m.cpu)} / ${html(m.maxcpu || 0)} vCPU</td>
+          <td>${bytes(m.mem)} / ${bytes(m.maxmem)}</td>
+          <td>${bytes(m.disk)} / ${bytes(m.maxdisk)}</td>
+          <td>${bytes(m.netout)} / ${bytes(m.netin)}</td>
+          <td>${duration(m.uptime)}</td>
+          <td>${tags}</td>
+          <td><div class="actions">
+            <button class="btn btn-sm btn-outline-success" data-action="start" data-key="${html(key)}" ${!stopped || busy || number(m.template) ? "disabled" : ""}>Iniciar</button>
+            <button class="btn btn-sm btn-outline-danger" data-action="stop" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Parar</button>
+            <button class="btn btn-sm btn-outline-primary" data-action="reboot" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Reiniciar</button>
+          </div></td>
+        </tr>`;
+      }
+
+      function requestAction(action, key) {
+        const [node, type, vmid] = key.split("/");
+        const machine = state.machines.find(m => String(m.vmid) === vmid && m.node === node && m.type === type);
+        if (!machine) return;
+        const labels = { start:"iniciar", stop:"parar", reboot:"reiniciar" };
+        state.pending = { action, key, machine };
+        $("confirm-title").textContent = `${labels[action][0].toUpperCase()}${labels[action].slice(1)} máquina`;
+        $("confirm-text").textContent = `Deseja ${labels[action]} ${machine.name || "a máquina"} (VMID ${vmid}) no node ${node}?`;
+        $("confirm-action").className = `btn ${action === "stop" ? "btn-danger" : "btn-primary"}`;
+        $("confirm-dialog").showModal();
+      }
+
+      async function executeAction() {
+        const pending = state.pending;
+        if (!pending) return;
+        $("confirm-dialog").close();
+        state.busy.add(pending.key); renderTable(); showError("");
+        const { machine, action, key } = pending;
+        try {
+          await pvesh(["create", `/nodes/${machine.node}/${machine.type}/${machine.vmid}/status/${action}`]);
+          $("updated").textContent = `Comando para ${action === "start" ? "iniciar" : action === "stop" ? "parar" : "reiniciar"} enviado. Atualizando…`;
+          window.setTimeout(load, 1500);
+        } catch (error) {
+          showError(`Falha ao executar a ação na VMID ${machine.vmid}.\n${error.message || error}`);
+        } finally {
+          state.busy.delete(key); state.pending = null; renderTable();
+        }
+      }
+
+      function showError(message) {
+        $("message").textContent = message;
+        $("message").classList.toggle("show", Boolean(message));
+      }
+
+      $("refresh").addEventListener("click", load);
+      ["search", "status-filter", "type-filter"].forEach(id => $(id).addEventListener(id === "search" ? "input" : "change", renderTable));
+      $("machines").addEventListener("click", event => {
+        const button = event.target.closest("button[data-action]");
+        if (button) requestAction(button.dataset.action, button.dataset.key);
+      });
+      $("cancel-action").addEventListener("click", () => { state.pending = null; $("confirm-dialog").close(); });
+      $("confirm-action").addEventListener("click", executeAction);
+      load();
+    })();
+  </script>
+</body>
+</html>

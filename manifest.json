@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "requires": {
+    "cockpit": "215"
+  },
+  "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:",
+  "menu": {
+    "proxmox-overview": {
+      "label": "Proxmox Overview",
+      "path": "index.html",
+      "order": 70
+    }
+  }
+}
