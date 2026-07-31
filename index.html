@@ -196,7 +196,7 @@
     (() => {
       "use strict";
       const $ = id => document.getElementById(id);
-      const state = { machines: [], storage: [], busy: new Set(), pending: null, quickLinks: [], loading: false, refreshTimer: null, commandMachine: null, commandProcess: null };
+      const state = { machines: [], nodes: [], storage: [], busy: new Set(), pending: null, quickLinks: [], loading: false, refreshTimer: null, commandMachine: null, commandProcess: null };
       const quickLinksKey = "cockpit-proxmox-quick-links";
       const refreshInterval = 15000;
       const html = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
@@ -230,11 +230,13 @@
         $("refresh").disabled = true;
         showError("");
         try {
-          const [machines, storage] = await Promise.all([
+          const [machines, nodes, storage] = await Promise.all([
             pvesh(["get", "/cluster/resources", "--type", "vm"]),
+            pvesh(["get", "/cluster/resources", "--type", "node"]),
             pvesh(["get", "/cluster/resources", "--type", "storage"]).catch(() => [])
           ]);
           state.machines = machines.map(m => ({ ...m, type: String(m.type || "").toLowerCase() }));
+          state.nodes = nodes;
           state.storage = storage;
           render();
           loadDescriptions(state.machines);
@@ -280,18 +282,19 @@
         const running = m.filter(x => x.status === "running").length;
         const stopped = m.filter(x => x.status === "stopped").length;
         const paused = m.filter(x => x.status === "paused").length;
-        const cpuRatio = m.length ? m.reduce((n, x) => n + number(x.cpu) * number(x.maxcpu), 0) / Math.max(1, sum(m, "maxcpu")) : 0;
-        const mem = sum(m, "mem"), maxmem = sum(m, "maxmem");
+        const nodeCpus = sum(state.nodes, "maxcpu");
+        const cpuRatio = state.nodes.length ? state.nodes.reduce((n, x) => n + number(x.cpu) * number(x.maxcpu), 0) / Math.max(1, nodeCpus) : 0;
+        const mem = sum(state.nodes, "mem"), maxmem = sum(state.nodes, "maxmem");
         const disk = sum(m, "disk"), maxdisk = sum(m, "maxdisk");
         const storageUsed = sum(state.storage, "disk"), storageMax = sum(state.storage, "maxdisk");
         $("total").textContent = m.length;
         $("types").textContent = `${m.filter(x => x.type === "qemu").length} QEMU · ${m.filter(x => x.type === "lxc").length} LXC`;
         $("running").textContent = running;
         $("states").textContent = `${stopped} desligadas · ${paused} pausadas`;
-        $("cpu").textContent = percent(cpuRatio);
-        $("cpus").textContent = `${sum(m, "maxcpu")} CPUs alocadas`;
+        $("cpu").textContent = state.nodes.length ? percent(cpuRatio) : "—";
+        $("cpus").textContent = state.nodes.length ? `${nodeCpus} CPUs disponíveis nos nodes` : "Dados dos nodes indisponíveis";
         $("memory").textContent = maxmem ? percent(mem / maxmem) : "—";
-        $("memory-detail").textContent = `${bytes(mem)} usados · ${bytes(Math.max(0, maxmem - mem))} disponíveis`;
+        $("memory-detail").textContent = maxmem ? `${bytes(mem)} usados · ${bytes(Math.max(0, maxmem - mem))} disponíveis` : "Dados dos nodes indisponíveis";
         $("disk").textContent = maxdisk ? percent(disk / maxdisk) : "—";
         $("disk-detail").textContent = `${bytes(disk)} de ${bytes(maxdisk)}`;
         $("storage").textContent = storageMax ? percent(storageUsed / storageMax) : "—";

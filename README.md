@@ -26,6 +26,13 @@ The main machine data is read with:
 pvesh get /cluster/resources --type vm --output-format json
 ```
 
+Physical CPU and memory usage are read from the Proxmox nodes instead of
+summing guest limits, which may be overcommitted:
+
+```shell
+pvesh get /cluster/resources --type node --output-format json
+```
+
 Additional `pvesh` requests are used to retrieve storage and machine
 configuration details.
 
