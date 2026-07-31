@@ -84,6 +84,9 @@
     dialog { width: min(440px, calc(100% - 32px)); padding: 0; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 10px 30px #0006; }
     dialog::backdrop { background: #0008; }
     .dialog-body { padding: 22px; } .dialog-actions { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+    #command-dialog { width: min(760px, calc(100% - 32px)); }
+    #command-input { min-height: 90px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #command-output { min-height: 180px; max-height: 380px; overflow: auto; margin: 14px 0 0; padding: 14px; border-radius: 4px; background: #111; color: #f5f5f5; white-space: pre-wrap; word-break: break-word; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
     @media (max-width: 1200px) { .cards { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 800px) { .page { padding: 16px; } .cards { grid-template-columns: repeat(2, 1fr); } .split { grid-template-columns: 1fr; } header { align-items: flex-start; } }
     @media (max-width: 480px) { .cards { grid-template-columns: 1fr; } header { flex-direction: column; } input { min-width: 100%; } }
@@ -173,11 +176,27 @@
     <div class="dialog-actions"><button class="btn btn-primary" id="close-details">Fechar</button></div>
   </dialog>
 
+  <dialog id="command-dialog">
+    <form id="command-form">
+      <div class="dialog-body">
+        <h2 id="command-title">Executar comando</h2>
+        <p class="muted" id="command-help"></p>
+        <label class="form-label" for="command-input">Comando</label>
+        <textarea class="form-control" id="command-input" required spellcheck="false" placeholder="Exemplo: uname -a"></textarea>
+        <pre id="command-output" aria-live="polite">A saída aparecerá aqui.</pre>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-outline-secondary" type="button" id="close-command">Fechar</button>
+        <button class="btn btn-primary" type="submit" id="run-command">Executar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     (() => {
       "use strict";
       const $ = id => document.getElementById(id);
-      const state = { machines: [], storage: [], busy: new Set(), pending: null, quickLinks: [], loading: false, refreshTimer: null };
+      const state = { machines: [], storage: [], busy: new Set(), pending: null, quickLinks: [], loading: false, refreshTimer: null, commandMachine: null, commandProcess: null };
       const quickLinksKey = "cockpit-proxmox-quick-links";
       const refreshInterval = 15000;
       const html = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
@@ -350,7 +369,7 @@
           <td>${tags}</td>
           <td><div class="actions">
             <button class="btn btn-sm btn-outline-secondary" data-action="details" data-key="${html(key)}">Detalhes</button>
-            <button class="btn btn-sm btn-outline-secondary" data-action="console" data-key="${html(key)}" ${!running || busy || number(m.template) ? "disabled" : ""}>Console</button>
+            <button class="btn btn-sm btn-outline-secondary" data-action="command" data-key="${html(key)}" ${!running || busy || number(m.template) ? "disabled" : ""}>Comando</button>
             <button class="btn btn-sm btn-outline-success" data-action="start" data-key="${html(key)}" ${!stopped || busy || number(m.template) ? "disabled" : ""}>Iniciar</button>
             <button class="btn btn-sm btn-outline-danger" data-action="stop" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Parar</button>
             <button class="btn btn-sm btn-outline-primary" data-action="reboot" data-key="${html(key)}" ${!running || busy ? "disabled" : ""}>Reiniciar</button>
@@ -366,8 +385,8 @@
           showDetails(machine);
           return;
         }
-        if (action === "console") {
-          openConsole(machine);
+        if (action === "command") {
+          openCommandDialog(machine);
           return;
         }
         const labels = { start:"iniciar", stop:"parar", reboot:"reiniciar" };
@@ -414,24 +433,50 @@
         ).join("") || '<span class="muted">Nenhum link adicionado.</span>';
       }
 
-      function openConsole(machine) {
-        const host = window.location.hostname;
-        const params = new URLSearchParams({
-          console: machine.type === "lxc" ? "lxc" : "kvm",
-          novnc: "1",
-          vmid: String(machine.vmid),
-          vmname: machine.name || "",
-          node: machine.node,
-          resize: "scale",
-          cmd: ""
-        });
-        const consoleUrl = `${window.location.protocol}//${host}:8006/?${params}`;
-        const consoleWindow = window.open(consoleUrl, `pve-console-${machine.vmid}`);
-        if (consoleWindow) {
-          consoleWindow.opener = null;
-        } else {
-          showError("O navegador bloqueou a janela do console. Permita pop-ups para este endereço do Cockpit.");
+      function openCommandDialog(machine) {
+        state.commandMachine = machine;
+        $("command-title").textContent = `Executar comando · ${machine.name || `VMID ${machine.vmid}`}`;
+        $("command-help").textContent = machine.type === "lxc"
+          ? `O comando será executado no container LXC ${machine.vmid} por meio de pct exec.`
+          : `O comando será executado na VM QEMU ${machine.vmid} por meio do QEMU Guest Agent. O agente precisa estar instalado, ativo e habilitado.`;
+        $("command-input").value = "";
+        $("command-output").textContent = "A saída aparecerá aqui.";
+        $("run-command").disabled = false;
+        $("command-dialog").showModal();
+        $("command-input").focus();
+      }
+
+      async function executeGuestCommand(event) {
+        event.preventDefault();
+        const machine = state.commandMachine;
+        const command = $("command-input").value.trim();
+        if (!machine || !command || state.commandProcess) return;
+        const args = machine.type === "lxc"
+          ? ["pct", "exec", String(machine.vmid), "--", "/bin/sh", "-lc", command]
+          : ["qm", "guest", "exec", String(machine.vmid), "--", "/bin/sh", "-lc", command];
+        $("command-output").textContent = "Executando…";
+        $("run-command").disabled = true;
+        const started = performance.now();
+        try {
+          state.commandProcess = cockpit.spawn(args, { superuser: "require", err: "out" });
+          const output = await state.commandProcess;
+          const elapsed = ((performance.now() - started) / 1000).toFixed(1);
+          $("command-output").textContent = `${output || "(comando concluído sem saída)"}\n\n[Concluído em ${elapsed}s]`;
+        } catch (error) {
+          $("command-output").textContent = `Falha ao executar o comando.\n\n${error.message || error}`;
+        } finally {
+          state.commandProcess = null;
+          $("run-command").disabled = false;
         }
+      }
+
+      function closeCommandDialog() {
+        if (state.commandProcess) {
+          state.commandProcess.close("cancelled");
+          state.commandProcess = null;
+        }
+        state.commandMachine = null;
+        $("command-dialog").close();
       }
 
       async function executeAction() {
@@ -465,6 +510,12 @@
       $("cancel-action").addEventListener("click", () => { state.pending = null; $("confirm-dialog").close(); });
       $("confirm-action").addEventListener("click", executeAction);
       $("close-details").addEventListener("click", () => $("details-dialog").close());
+      $("command-form").addEventListener("submit", executeGuestCommand);
+      $("close-command").addEventListener("click", closeCommandDialog);
+      $("command-dialog").addEventListener("cancel", event => {
+        event.preventDefault();
+        closeCommandDialog();
+      });
       $("quick-link-form").addEventListener("submit", event => {
         event.preventDefault();
         const name = $("quick-link-name").value.trim();

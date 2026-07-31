@@ -17,7 +17,7 @@ and uses Bootstrap from jsDelivr.
 - Browser-persisted quick links for frequently used services
 - Automatic refresh every 15 seconds while the page is visible
 - Search and filters by status and machine type
-- Open the native Proxmox noVNC console for running guests
+- Run one-shot shell commands inside running QEMU VMs and LXC containers
 - Start, stop, and reboot actions for QEMU VMs and LXC containers
 
 The main machine data is read with:
@@ -112,24 +112,30 @@ Power actions are sent to these Proxmox API paths:
 The **Stop** action performs an immediate Proxmox `stop` operation. It is not a
 guest operating system shutdown.
 
-## noVNC console
+## Guest commands
 
-Click **Console** on a running guest to open the native Proxmox console in a
-new browser window. The plugin uses the current Cockpit hostname and opens the
-Proxmox web interface on HTTPS port `8006`. QEMU guests use the KVM noVNC
-console, while LXC guests use the Proxmox container console.
+Click **Command** on a running guest to execute a one-shot shell command and
+view its output inside the Cockpit page.
 
-The browser may ask you to:
+For LXC containers, the plugin runs:
 
-- Allow pop-up windows for the Cockpit address
-- Accept the Proxmox HTTPS certificate
-- Sign in to the Proxmox web interface
+```shell
+pct exec VMID -- /bin/sh -lc "COMMAND"
+```
 
-Cockpit and Proxmox authentication sessions are independent. Opening a console
-does not copy Cockpit credentials or create a Proxmox API ticket. If Cockpit is
-accessed through a reverse proxy or a hostname that does not expose Proxmox
-port `8006`, the generated console URL may need to be adjusted for that
-environment.
+For QEMU VMs, the plugin runs:
+
+```shell
+qm guest exec VMID -- /bin/sh -lc "COMMAND"
+```
+
+QEMU command execution requires the QEMU Guest Agent to be installed and
+running inside the guest and enabled in the VM configuration. LXC execution
+does not require SSH or guest credentials.
+
+This is a command runner, not a persistent interactive terminal. Commands that
+require an interactive TTY, such as text editors or password prompts, are not
+supported. Closing the command dialog cancels a command that is still running.
 
 ## Quick links
 
